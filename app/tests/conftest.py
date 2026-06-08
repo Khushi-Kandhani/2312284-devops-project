@@ -1,7 +1,7 @@
 import os
 import pytest
 
-# CRITICAL: Force an isolated local SQLite file database for testing 
+# RITICAL: Force an isolated local SQLite file database for testing 
 # before any other application modules load and attempt to connect!
 TEST_DB_URL = "sqlite:///./test.db"
 os.environ["DATABASE_URL"] = TEST_DB_URL
