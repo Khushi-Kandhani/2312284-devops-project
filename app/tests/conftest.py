@@ -1,9 +1,9 @@
 import os
 import pytest
 
-# RITICAL: Force an isolated local SQLite file database for testing 
-# before any other application modules load and attempt to connect!
-TEST_DB_URL = "sqlite:///./test.db"
+# CRITICAL: Force an isolated, pure in-memory SQLite database for testing.
+# This completely bypasses file-system read-only and permission blocks!
+TEST_DB_URL = "sqlite:///:memory:"
 os.environ["DATABASE_URL"] = TEST_DB_URL
 
 from fastapi.testclient import TestClient
@@ -12,30 +12,29 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
 from app.main import app
 
-# Create clean testing database engine
-engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
+# Create clean testing database engine in RAM
+# Static pool is required for in-memory SQLite to share the connection across threads safely
+from sqlalchemy.pool import StaticPool
+engine = create_engine(
+    TEST_DB_URL, 
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @pytest.fixture(scope="function")
 def db():
-    # 1. Build database schema from scratch
+    # 1. Build database schema in RAM from scratch
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
         yield session
     finally:
-        # 2. Explicitly close the session first to release database locks!
+        # 2. Close session cleanly
         session.close()
         
-        # 3. Now it is perfectly safe to drop tables
+        # 3. Wipe the schema so the next test gets a perfectly pristine slate
         Base.metadata.drop_all(bind=engine)
-        
-        # 4. Clean up the physical file safely
-        if os.path.exists("./test.db"):
-            try:
-                os.remove("./test.db")
-            except OSError:
-                pass
 
 @pytest.fixture(scope="function")
 def client(db):
