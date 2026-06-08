@@ -18,15 +18,19 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(scope="function")
 def db():
-    # Build database schema from scratch for this test
+    # 1. Build database schema from scratch
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
         yield session
     finally:
+        # 2. Explicitly close the session first to release database locks!
         session.close()
-        # Drop everything cleanly when the test completes
+        
+        # 3. Now it is perfectly safe to drop tables
         Base.metadata.drop_all(bind=engine)
+        
+        # 4. Clean up the physical file safely
         if os.path.exists("./test.db"):
             try:
                 os.remove("./test.db")
@@ -40,6 +44,7 @@ def client(db):
             yield db
         finally:
             pass
+            
     # Safely swap out production DB connections for our mock DB session instance
     app.dependency_overrides[get_db] = _get_test_db
     with TestClient(app) as c:
